@@ -118,7 +118,8 @@ async def get_task(db_path: str, task_id: str) -> dict | None:
     async with aiosqlite.connect(db_path) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT task_id, final_answer, token_usage, latency_ms FROM tasks WHERE task_id = ?", (task_id,)
+            "SELECT task_id, input, final_answer, status, token_usage, latency_ms, created_at FROM tasks WHERE task_id = ?",
+            (task_id,),
         ) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row is not None else None
@@ -172,10 +173,9 @@ async def get_trace_steps(db_path: str, task_id: str) -> list[dict]:
         A list of dicts, one per step, in execution order.
     """
     async with aiosqlite.connect(db_path) as db:
-        # TODO: maybe this is too much for returning.
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT id, task_id, step_index, type, content, tool_name, tool_input, tool_output, timestampFROM trace_steps WHERE task_id = ? ORDER BY step_index ASC",
+            "SELECT id, task_id, step_index, type, content, tool_name, tool_input, tool_output, timestamp FROM trace_steps WHERE task_id = ? ORDER BY step_index ASC",
             (task_id,),
         ) as cursor:
             rows = await cursor.fetchall()

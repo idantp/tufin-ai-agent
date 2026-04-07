@@ -6,14 +6,33 @@ and task retrieval endpoints. Uses async SQLite for persistence and
 centralized configuration via pydantic-settings.
 """
 
+import json
 import logging
+import time
+import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 
 from app.config import get_settings
-from app.database import init_db
-from app.models import HealthResponse, TaskRequest, TaskResponse
+from app.database import (
+    create_task,
+    get_task,
+    get_trace_steps,
+    init_db,
+    insert_trace_step,
+    update_task,
+)
+from app.models import (
+    HealthResponse,
+    TaskRecord,
+    TaskRequest,
+    TaskResponse,
+    TaskStatus,
+    TraceStep,
+    TraceStepType,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -70,34 +89,150 @@ async def health() -> HealthResponse:
 
 
 @app.post("/task", response_model=TaskResponse)
-async def create_task(task_request: TaskRequest) -> TaskResponse:
+async def create_task_endpoint(task_request: TaskRequest) -> TaskResponse:
     """
-    Submit a new task to the agent (stub implementation).
+    Submit a new task to the agent.
+
+    Creates a pending task, inserts a placeholder trace step, and returns
+    the task response. No real agent logic yet.
 
     Args:
         task_request: Task request containing the input text.
 
     Returns:
         TaskResponse: Task ID, final answer, and execution trace.
+
+    Raises:
+        HTTPException: 500 if task creation fails.
     """
-    return TaskResponse(
-        task_id="stub",
-        final_answer="not implemented",
-        trace=[],
-    )
+    settings = get_settings()
+    task_id = str(uuid.uuid4())
+    start_time = time.perf_counter()
+
+    logger.info("Task received: %s | input: %s", task_id, task_request.input[:50])
+
+    try:
+        # Create pending task in DB
+        await create_task(settings.database_url, task_id, task_request.input)
+
+        # Insert placeholder trace step
+        await insert_trace_step(
+            settings.database_url,
+            task_id,
+            step_index=0,
+            type=TraceStepType.FINAL_ANSWER.value,
+            content="Agent not yet implemented",
+            tool_name=None,
+            tool_input=None,
+            tool_output=None,
+        )
+
+        # Compute latency
+        latency_ms = int((time.perf_counter() - start_time) * 1000)
+
+        # Update task to completed
+        await update_task(
+            settings.database_url,
+            task_id,
+            final_answer="Agent not yet implemented",
+            status=TaskStatus.COMPLETED.value,
+            token_usage=0,
+            latency_ms=latency_ms,
+        )
+
+        logger.info("Task completed: %s | latency: %sms", task_id, latency_ms)
+
+        # Build trace step for response
+        trace_step = TraceStep(
+            step_index=0,
+            type=TraceStepType.FINAL_ANSWER,
+            content="Agent not yet implemented",
+        )
+
+        return TaskResponse(
+            task_id=task_id,
+            final_answer="Agent not yet implemented",
+            trace=[trace_step],
+            token_usage=0,
+            latency_ms=latency_ms,
+        )
+
+    except Exception as e:
+        logger.error("Task failed: %s | error: %s", task_id, str(e))
+        await update_task(
+            settings.database_url,
+            task_id,
+            final_answer=str(e),
+            status=TaskStatus.FAILED.value,
+            token_usage=0,
+            latency_ms=0,
+        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/tasks/{task_id}")
-async def get_task_by_id(task_id: str):
+@app.get("/tasks/{task_id}", response_model=TaskRecord)
+async def get_task_endpoint(task_id: str) -> TaskRecord:
     """
-    Retrieve a task by ID (stub implementation).
+    Retrieve a task by ID.
 
     Args:
         task_id: The UUID of the task to retrieve.
 
     Returns:
-        HTTP 501 Not Implemented.
-    """
-    from fastapi import Response
+        TaskRecord: Full task record with trace steps.
 
-    return Response(status_code=501, content="Not Implemented")
+    Raises:
+        HTTPException: 404 if task not found.
+    """
+    settings = get_settings()
+
+    logger.info("Task retrieved: %s", task_id)
+
+    # Get task from DB
+    task_dict = await get_task(settings.database_url, task_id)
+    if task_dict is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Get trace steps from DB
+    trace_steps_dicts = await get_trace_steps(settings.database_url, task_id)
+
+    # Reconstruct TraceStep models from DB dicts
+    # TODO: implement this somewhere else.
+    trace_steps = []
+    for step_dict in trace_steps_dicts:
+        # Parse JSON strings for tool_input and tool_output
+        tool_input = None
+        if step_dict.get("tool_input"):
+            tool_input = json.loads(step_dict["tool_input"])
+
+        tool_output = None
+        if step_dict.get("tool_output"):
+            tool_output = json.loads(step_dict["tool_output"])
+
+        # Parse timestamp string to datetime
+        timestamp = datetime.fromisoformat(step_dict["timestamp"])
+
+        trace_step = TraceStep(
+            step_index=step_dict["step_index"],
+            type=TraceStepType(step_dict["type"]),
+            content=step_dict.get("content"),
+            tool_name=step_dict.get("tool_name"),
+            tool_input=tool_input,
+            tool_output=tool_output,
+            timestamp=timestamp,
+        )
+        trace_steps.append(trace_step)
+
+    # Parse created_at timestamp
+    created_at = datetime.fromisoformat(task_dict["created_at"])
+
+    return TaskRecord(
+        task_id=task_dict["task_id"],
+        input=task_dict["input"],
+        final_answer=task_dict.get("final_answer"),
+        status=TaskStatus(task_dict["status"]),
+        token_usage=task_dict.get("token_usage"),
+        latency_ms=task_dict.get("latency_ms"),
+        created_at=created_at,
+        trace=trace_steps,
+    )

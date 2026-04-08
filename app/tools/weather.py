@@ -1,47 +1,110 @@
+"""
+Weather tool for fetching current weather conditions for a given city.
+
+Uses the OpenWeatherMap /data/2.5/weather API with the key configured
+via OPENWEATHER_API_KEY in the application settings.
+"""
+
+import logging
+
 import httpx
-from typing import Any
+from pydantic import BaseModel, Field
 
-WTTR_URL = "https://wttr.in/{city}?format=j1"
+from app.config import get_settings
 
 
-def get_weather(city: str) -> dict[str, Any]:
+logger = logging.getLogger(__name__)
+
+_OPENWEATHER_URL = "https://api.openweathermap.org/data/2.5/weather"
+_REQUEST_TIMEOUT = 10.0
+
+
+class WeatherInput(BaseModel):
+    """Input model for the weather tool."""
+
+    city: str = Field(
+        min_length=1,
+        max_length=100,
+        description="Name of the city to fetch weather for (e.g. 'London')",
+    )
+
+
+class WeatherOutput(BaseModel):
+    """Output model for the weather tool."""
+
+    city: str | None = Field(default=None, description="Normalized city name returned by the API")
+    country: str | None = Field(default=None, description="Two-letter country code")
+    temperature_celsius: float | None = Field(default=None, description="Current temperature in °C")
+    feels_like_celsius: float | None = Field(default=None, description="Feels-like temperature in °C")
+    humidity_percent: int | None = Field(default=None, description="Relative humidity in percent")
+    description: str | None = Field(default=None, description="Short weather description (e.g. 'light rain')")
+    wind_speed_ms: float | None = Field(default=None, description="Wind speed in metres per second")
+    error: str | None = Field(default=None, description="Error message if the request failed, otherwise None")
+
+
+async def get_weather(input: WeatherInput) -> WeatherOutput:
     """
-    Fetch current weather for a given city using wttr.in.
-    No API key required.
+    Fetch current weather conditions for a city from OpenWeatherMap.
 
     Args:
-        city: City name e.g. "Paris", "New York", "Tel Aviv"
+        input: WeatherInput containing the city name.
 
     Returns:
-        Dict with current weather conditions or an error message.
+        WeatherOutput with current conditions, or an error message on failure.
     """
+    settings = get_settings()
+
+    if not settings.openweather_api_key:
+        logger.warning("OpenWeatherMap API key is not configured")
+        return WeatherOutput(error="OpenWeatherMap API key is not configured")
+
+    logger.debug("Fetching weather for city: %s", input.city)
+
     try:
-        response = httpx.get(
-            WTTR_URL.format(city=city),
-            timeout=10,
-            follow_redirects=True,
-        )
-        response.raise_for_status()
+        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
+            response = await client.get(
+                _OPENWEATHER_URL,
+                params={"q": input.city, "appid": settings.openweather_api_key, "units": "metric"},
+            )
+
+        if response.status_code == 401:
+            logger.warning("Invalid OpenWeatherMap API key")
+            return WeatherOutput(error="Invalid or missing OpenWeatherMap API key")
+
+        if response.status_code == 404:
+            logger.warning("City not found: %s", input.city)
+            return WeatherOutput(error=f"City not found: {input.city}")
+
+        if response.status_code != 200:
+            logger.warning("Unexpected HTTP %s for city: %s", response.status_code, input.city)
+            return WeatherOutput(error=f"Unexpected error: HTTP {response.status_code}")
+
         data = response.json()
+        weather = data.get("weather", [{}])[0]
 
-        current = data["current_condition"][0]
+        result = WeatherOutput(
+            city=data.get("name"),
+            country=data.get("sys", {}).get("country"),
+            temperature_celsius=data.get("main", {}).get("temp"),
+            feels_like_celsius=data.get("main", {}).get("feels_like"),
+            humidity_percent=data.get("main", {}).get("humidity"),
+            description=weather.get("description"),
+            wind_speed_ms=data.get("wind", {}).get("speed"),
+        )
 
+        logger.debug(
+            "Weather fetched: %s, %s | temp=%.1f°C | %s",
+            result.city,
+            result.country,
+            result.temperature_celsius or 0.0,
+            result.description,
+        )
+        return result
 
-        return {
-            "city": city,
-            "temp_celsius": int(current["temp_C"]),
-            "feels_like_celsius": int(current["FeelsLikeC"]),
-            "description": current["weatherDesc"][0]["value"],
-            "humidity_percentage": int(current["humidity"]),
-            "precipitation_mm": float(current["precipMM"]),
-        }
-
-    # TODO: Handle the errors properly
     except httpx.TimeoutException:
-        return {"error": f"Request timed out fetching weather for '{city}'"}
-    except httpx.HTTPStatusError as e:
-        return {"error": f"HTTP {e.response.status_code} fetching weather for '{city}'"}
-    except (KeyError, IndexError, ValueError) as e:
-        return {"error": f"Unexpected response format from weather API: {e}"}
-    except Exception as e:
-        return {"error": f"Unexpected error: {e}"}
+        logger.warning("Request timed out fetching weather for city: %s", input.city)
+        return WeatherOutput(error=f"Request timed out fetching weather for '{input.city}'")
+
+    except httpx.RequestError as exc:
+        logger.warning("Network error fetching weather for city: %s | error: %s", input.city, exc)
+        return WeatherOutput(error=f"Network error: {exc}")

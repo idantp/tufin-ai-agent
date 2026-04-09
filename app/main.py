@@ -33,7 +33,7 @@ from app.models import (
     TraceStep,
     TraceStepType,
 )
-from app.agent.graph import agent
+from app.agent.graph import multi_step_agent
 from app.agent.state import AgentState
 from langchain_core.messages import HumanMessage
 
@@ -113,10 +113,14 @@ async def create_task_endpoint(task_request: TaskRequest) -> TaskResponse:
     start_time = time.perf_counter()
     
     state = AgentState(
-        messages=[HumanMessage(content=task_request.input)],
+        messages=[
+            HumanMessage(content=task_request.input)
+        ],
         steps_count=0,
+        task_id=task_id,
+        tokens_usage=0,
     )
-    result = agent.invoke(state)
+    result = await multi_step_agent.ainvoke(state)
 
     logger.info("Task received: %s | input: %s", task_id, task_request.input[:50])
 

@@ -10,7 +10,7 @@ import logging
 from tavily import TavilyClient
 
 from app.config import get_settings
-from app.tools.models import WebSearchInput, WebSearchOutput
+from app.tools.models import WebSearchOutput
 from langchain_core.tools import tool
 
 logger = logging.getLogger(__name__)
@@ -20,12 +20,13 @@ _REQUEST_TIMEOUT = 10.0
 
 
 @tool
-async def search_web(input: WebSearchInput) -> str:
+async def search_web(query: str, max_results: int = 5) -> str:
     """
     Search the web using Tavily and return summarized results.
 
     Args:
-        input: WebSearchInput containing the search query (e.g. "latest AI developments") and max results (1-10).
+        query: Search query to find information on the web (e.g. "latest AI developments").
+        max_results: Maximum number of search results to return (1-10). Defaults to 5.
 
     Returns JSON string with:
         - "query": the search query
@@ -39,14 +40,14 @@ async def search_web(input: WebSearchInput) -> str:
         logger.warning("Tavily API key is not configured")
         return WebSearchOutput(error="Tavily API key is not configured").model_dump_json()
 
-    logger.debug("Searching web for query: %s (max_results=%d)", input.query, input.max_results)
+    logger.debug("Searching web for query: %s (max_results=%d)", query, max_results)
 
     try:
         client = TavilyClient(api_key=settings.tavily_api_key)
         
         response = client.search(
-            query=input.query,
-            max_results=input.max_results,
+            query=query,
+            max_results=max_results,
             include_answer=True,
         )
 
@@ -61,19 +62,19 @@ async def search_web(input: WebSearchInput) -> str:
         summary = response.get("answer", "No summary available")
 
         result = WebSearchOutput(
-            query=input.query,
+            query=query,
             summary=summary,
             results=results,
         ).model_dump_json()
 
         logger.debug(
             "Web search completed: query='%s' | results=%d | summary_length=%d",
-            input.query,
+            query,
             len(results),
             len(summary) if summary else 0,
         )
         return result
 
     except Exception as exc:
-        logger.warning("Error searching web for query: %s | error: %s", input.query, exc)
+        logger.warning("Error searching web for query: %s | error: %s", query, exc)
         return WebSearchOutput(error=f"Search error: {exc}").model_dump_json()

@@ -29,7 +29,7 @@ def build_agent_graph() -> StateGraph:
         should_call_tool,
         {
             True: "tools_execution",
-            False: END, #TODO: should call generate_answer
+            False: END,
         },
     )
     # TODO: should add Observation node?

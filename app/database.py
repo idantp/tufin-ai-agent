@@ -10,7 +10,6 @@ import os
 
 import aiosqlite
 
-
 async def init_db(db_path: str) -> None:
     """
     Create the data directory and both tables (tasks, trace_steps) if they do

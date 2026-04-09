@@ -10,7 +10,7 @@ import logging
 import httpx
 
 from app.config import get_settings
-from app.tools.models import WeatherInput, WeatherOutput
+from app.tools.models import WeatherOutput
 from langchain_core.tools import tool
 
 logger = logging.getLogger(__name__)
@@ -23,12 +23,12 @@ _REQUEST_TIMEOUT = 10.0
 
 
 @tool
-async def get_weather(input: WeatherInput) -> str:
+async def get_weather(city: str) -> str:
     """
     Fetch current weather conditions for a city from OpenWeatherMap.
 
     Args:
-        input: WeatherInput containing the city name (e.g. "New York", "Paris", "Tokyo").
+        city: Name of the city to fetch weather for (e.g. "New York", "Paris", "Tokyo").
 
     Returns JSON string with:
         - "city": the name of the city
@@ -46,13 +46,13 @@ async def get_weather(input: WeatherInput) -> str:
         logger.warning("OpenWeatherMap API key is not configured")
         return WeatherOutput(error="OpenWeatherMap API key is not configured").model_dump_json()
 
-    logger.debug("Fetching weather for city: %s", input.city)
+    logger.debug("Fetching weather for city: %s", city)
 
     try:
         async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
             response = await client.get(
                 _OPENWEATHER_URL,
-                params={"q": input.city, "appid": settings.openweather_api_key, "units": "metric"},
+                params={"q": city, "appid": settings.openweather_api_key, "units": "metric"},
             )
 
         if response.status_code == 401:
@@ -60,17 +60,17 @@ async def get_weather(input: WeatherInput) -> str:
             return WeatherOutput(error="Invalid or missing OpenWeatherMap API key").model_dump_json()
 
         if response.status_code == 404:
-            logger.warning("City not found: %s", input.city)
-            return WeatherOutput(error=f"City not found: {input.city}").model_dump_json()
+            logger.warning("City not found: %s", city)
+            return WeatherOutput(error=f"City not found: {city}").model_dump_json()
 
         if response.status_code != 200:
-            logger.warning("Unexpected HTTP %s for city: %s", response.status_code, input.city)
+            logger.warning("Unexpected HTTP %s for city: %s", response.status_code, city)
             return WeatherOutput(error=f"Unexpected error: HTTP {response.status_code}").model_dump_json()
 
         data = response.json()
         weather = data.get("weather", [{}])[0]
 
-        result = WeatherOutput(
+        weather_output = WeatherOutput(
             city=data.get("name"),
             country=data.get("sys", {}).get("country"),
             temperature_celsius=data.get("main", {}).get("temp"),
@@ -78,21 +78,21 @@ async def get_weather(input: WeatherInput) -> str:
             humidity_percent=data.get("main", {}).get("humidity"),
             description=weather.get("description"),
             wind_speed_ms=data.get("wind", {}).get("speed"),
-        ).model_dump_json()
+        )
 
         logger.debug(
             "Weather fetched: %s, %s | temp=%.1f°C | %s",
-            result.city,
-            result.country,
-            result.temperature_celsius or 0.0,
-            result.description,
+            weather_output.city,
+            weather_output.country,
+            weather_output.temperature_celsius or 0.0,
+            weather_output.description,
         )
-        return result
+        return weather_output.model_dump_json()
 
     except httpx.TimeoutException:
-        logger.warning("Request timed out fetching weather for city: %s", input.city)
-        return WeatherOutput(error=f"Request timed out fetching weather for '{input.city}'").model_dump_json()
+        logger.warning("Request timed out fetching weather for city: %s", city)
+        return WeatherOutput(error=f"Request timed out fetching weather for '{city}'").model_dump_json()
 
     except httpx.RequestError as exc:
-        logger.warning("Network error fetching weather for city: %s | error: %s", input.city, exc)
+        logger.warning("Network error fetching weather for city: %s | error: %s", city, exc)
         return WeatherOutput(error=f"Network error: {exc}").model_dump_json()

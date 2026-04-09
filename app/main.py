@@ -33,6 +33,9 @@ from app.models import (
     TraceStep,
     TraceStepType,
 )
+from app.agent.graph import agent
+from app.agent.state import AgentState
+from langchain_core.messages import HumanMessage
 
 
 logger = logging.getLogger(__name__)
@@ -108,6 +111,12 @@ async def create_task_endpoint(task_request: TaskRequest) -> TaskResponse:
     settings = get_settings()
     task_id = str(uuid.uuid4())
     start_time = time.perf_counter()
+    
+    state = AgentState(
+        messages=[HumanMessage(content=task_request.input)],
+        steps_count=0,
+    )
+    result = agent.invoke(state)
 
     logger.info("Task received: %s | input: %s", task_id, task_request.input[:50])
 

@@ -41,11 +41,10 @@ async def init_db(db_path: str) -> None:
                 task_id     TEXT     NOT NULL REFERENCES tasks(task_id),
                 step_index  INTEGER  NOT NULL,
                 type        TEXT     NOT NULL,
-                content     TEXT,
+                description TEXT,
                 tool_name   TEXT,
                 tool_input  TEXT,
-                tool_output TEXT,
-                timestamp   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                tool_output TEXT
             )
         """)
 
@@ -129,10 +128,10 @@ async def insert_trace_step(
     task_id: str,
     step_index: int,
     type: str,
-    content: str | None,
     tool_name: str | None,
     tool_input: str | None,
     tool_output: str | None,
+    description: str | None = None,
 ) -> None:
     """
     Insert a single trace step for a task.
@@ -141,21 +140,20 @@ async def insert_trace_step(
         db_path:     Path to the SQLite database file.
         task_id:     The parent task UUID.
         step_index:  0-based ordering index within the run.
-        type:        One of 'llm_reasoning', 'tool_call', 'tool_result',
-                     or 'final_answer'.
-        content:     Human-readable text payload (may be None).
-        tool_name:   Name of the tool invoked (only for tool_call/tool_result).
+        type:        One of 'llm_reasoning', 'tool_call', or 'final_answer'.
+        tool_name:   Name of the tool invoked (only for tool_call).
         tool_input:  JSON string of tool arguments (may be None).
         tool_output: JSON string of tool return value (may be None).
+        description: Short human-readable summary of this step (may be None).
     """
     async with aiosqlite.connect(db_path) as db:
         await db.execute(
             """
             INSERT INTO trace_steps
-                (task_id, step_index, type, content, tool_name, tool_input, tool_output)
+                (task_id, step_index, type, tool_name, tool_input, tool_output, description)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (task_id, step_index, type, content, tool_name, tool_input, tool_output),
+            (task_id, step_index, type, tool_name, tool_input, tool_output, description),
         )
         await db.commit()
 
@@ -174,7 +172,7 @@ async def get_trace_steps(db_path: str, task_id: str) -> list[dict]:
     async with aiosqlite.connect(db_path) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT id, task_id, step_index, type, content, tool_name, tool_input, tool_output, timestamp FROM trace_steps WHERE task_id = ? ORDER BY step_index ASC",
+            "SELECT id, task_id, step_index, type, tool_name, tool_input, tool_output, description FROM trace_steps WHERE task_id = ? ORDER BY step_index ASC",
             (task_id,),
         ) as cursor:
             rows = await cursor.fetchall()

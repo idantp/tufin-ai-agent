@@ -20,7 +20,7 @@ _REQUEST_TIMEOUT = 10.0
 
 
 @tool
-async def search_web(query: str, max_results: int = 5) -> str:
+async def search_web(query: str, max_results: int = 3) -> str:
     """
     Search the web using Tavily and return summarized results.
 
@@ -62,9 +62,7 @@ async def search_web(query: str, max_results: int = 5) -> str:
         summary = response.get("answer", "No summary available")
 
         result = WebSearchOutput(
-            query=query,
             summary=summary,
-            results=results,
         ).model_dump_json()
 
         logger.debug(

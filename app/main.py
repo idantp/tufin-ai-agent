@@ -40,6 +40,7 @@ from langchain_core.messages import HumanMessage
 
 logger = logging.getLogger(__name__)
 
+VERSION = "0.1.0"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -67,7 +68,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Multi-Tool Agent API",
     description="A general-purpose AI agent with observability",
-    version="0.1.0",
+    version=VERSION,
     lifespan=lifespan,
 )
 
@@ -88,7 +89,7 @@ async def health() -> HealthResponse:
     Returns:
         HealthResponse: Status and version information.
     """
-    return HealthResponse(status="ok", version="0.1.0")
+    return HealthResponse(status="ok", version=VERSION)
 
 
 @app.post("/task", response_model=TaskResponse)
@@ -96,8 +97,8 @@ async def create_task_endpoint(task_request: TaskRequest) -> TaskResponse:
     """
     Submit a new task to the agent.
 
-    Creates a pending task, inserts a placeholder trace step, and returns
-    the task response. No real agent logic yet.
+    Persists the task, runs the agent loop, records the full trace and final
+    answer to the DB, then returns the complete response.
 
     Args:
         task_request: Task request containing the input text.
@@ -106,79 +107,73 @@ async def create_task_endpoint(task_request: TaskRequest) -> TaskResponse:
         TaskResponse: Task ID, final answer, and execution trace.
 
     Raises:
-        HTTPException: 500 if task creation fails.
+        HTTPException: 500 if agent execution or persistence fails.
     """
     settings = get_settings()
     task_id = str(uuid.uuid4())
     start_time = time.perf_counter()
-    
-    state = AgentState(
-        messages=[
-            HumanMessage(content=task_request.input)
-        ],
-        steps_count=0,
-        task_id=task_id,
-        tokens_usage=0,
-    )
-    result = await multi_step_agent.ainvoke(state)
 
     logger.info("Task received: %s | input: %s", task_id, task_request.input[:50])
 
+    # Persist task before running so it exists even if the agent fails mid-run
+    await create_task(settings.database_url, task_id, task_request.input)
+
+    state = AgentState(
+        messages=[HumanMessage(content=task_request.input)],
+        agent_iteration=0,
+        trace_step_index=0,
+        task_id=task_id,
+        tokens_usage=0,
+        final_answer="",
+    )
+
     try:
-        # Create pending task in DB
-        await create_task(settings.database_url, task_id, task_request.input)
+        result = await multi_step_agent.ainvoke(state)
 
-        # Insert placeholder trace step
-        await insert_trace_step(
-            settings.database_url,
-            task_id,
-            step_index=0,
-            type=TraceStepType.FINAL_ANSWER.value,
-            content="Agent not yet implemented",
-            tool_name=None,
-            tool_input=None,
-            tool_output=None,
-        )
-
-        # Compute latency
+        final_answer: str = result.get("final_answer") or ""
+        tokens_usage: int = result.get("tokens_usage", 0)
         latency_ms = int((time.perf_counter() - start_time) * 1000)
 
-        # Update task to completed
         await update_task(
             settings.database_url,
             task_id,
-            final_answer="Agent not yet implemented",
+            final_answer=final_answer,
             status=TaskStatus.COMPLETED.value,
-            token_usage=0,
+            token_usage=tokens_usage,
             latency_ms=latency_ms,
         )
 
-        logger.info("Task completed: %s | latency: %sms", task_id, latency_ms)
+        logger.info("Task completed: %s | latency: %sms | tokens: %s", task_id, latency_ms, tokens_usage)
 
-        # Build trace step for response
-        trace_step = TraceStep(
-            step_index=0,
-            type=TraceStepType.FINAL_ANSWER,
-            content="Agent not yet implemented",
-        )
+        trace_steps_dicts = await get_trace_steps(settings.database_url, task_id)
+        trace_steps = [
+            TraceStep(
+                step_index=s["step_index"],
+                type=TraceStepType(s["type"]),
+                description=s.get("description"),
+                tool_name=s.get("tool_name"),
+                tool_input=json.loads(s["tool_input"]) if s.get("tool_input") else None,
+                tool_output=json.loads(s["tool_output"]) if s.get("tool_output") else None,
+            )
+            for s in trace_steps_dicts
+        ]
 
         return TaskResponse(
             task_id=task_id,
-            final_answer="Agent not yet implemented",
-            trace=[trace_step],
-            token_usage=0,
-            latency_ms=latency_ms,
+            final_answer=final_answer,
+            trace=trace_steps,
         )
 
     except Exception as e:
+        latency_ms = int((time.perf_counter() - start_time) * 1000)
         logger.error("Task failed: %s | error: %s", task_id, str(e))
         await update_task(
             settings.database_url,
             task_id,
-            final_answer=str(e),
+            final_answer=None,
             status=TaskStatus.FAILED.value,
             token_usage=0,
-            latency_ms=0,
+            latency_ms=latency_ms,
         )
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -213,7 +208,6 @@ async def get_task_endpoint(task_id: str) -> TaskRecord:
     # TODO: implement this somewhere else.
     trace_steps = []
     for step_dict in trace_steps_dicts:
-        # Parse JSON strings for tool_input and tool_output
         tool_input = None
         if step_dict.get("tool_input"):
             tool_input = json.loads(step_dict["tool_input"])
@@ -222,17 +216,13 @@ async def get_task_endpoint(task_id: str) -> TaskRecord:
         if step_dict.get("tool_output"):
             tool_output = json.loads(step_dict["tool_output"])
 
-        # Parse timestamp string to datetime
-        timestamp = datetime.fromisoformat(step_dict["timestamp"])
-
         trace_step = TraceStep(
             step_index=step_dict["step_index"],
             type=TraceStepType(step_dict["type"]),
-            content=step_dict.get("content"),
+            description=step_dict.get("description"),
             tool_name=step_dict.get("tool_name"),
             tool_input=tool_input,
             tool_output=tool_output,
-            timestamp=timestamp,
         )
         trace_steps.append(trace_step)
 

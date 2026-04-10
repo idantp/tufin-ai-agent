@@ -77,5 +77,4 @@ async def tools_executer_node(state: AgentState) -> AgentState:
     return {
         "messages": tools_results,
         "trace_step_index": trace_step_index,
-        "agent_iteration": agent_iteration + 1,
     }

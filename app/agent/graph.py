@@ -10,7 +10,7 @@ from app.agent.tools_executer_node import tools_executer_node
 def should_call_tool(state: AgentState) -> bool:
     """Check if the agent should call a tool."""
     settings = get_settings()
-    if state.get("steps_count", 0) >= settings.agent_max_iterations:
+    if state.get("agent_iteration", 0) >= settings.agent_max_iterations:
         return False
     last_message: BaseMessage = state["messages"][-1]
     if isinstance(last_message, AIMessage) and last_message.tool_calls:
@@ -29,11 +29,11 @@ def build_agent_graph() -> StateGraph:
         should_call_tool,
         {
             True: "tools_execution",
-            False: END,
+            False: "reasoning",
         },
     )
-    # TODO: should add Observation node?
+
     graph.add_edge("tools_execution", "reasoning")
     return graph.compile()
 
-agent = build_agent_graph()
+multi_step_agent = build_agent_graph()

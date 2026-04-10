@@ -1,6 +1,6 @@
 """Models for the tools."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 
 class CalculatorOutput(BaseModel):
@@ -15,6 +15,10 @@ class CalculatorOutput(BaseModel):
         description="Error message if evaluation failed, otherwise None",
     )
 
+    @model_serializer
+    def serialize_model(self):
+        return {k: v for k, v in self.__dict__.items() if v is not None}
+
 
 class WeatherOutput(BaseModel):
     """Output model for the weather tool."""
@@ -28,12 +32,17 @@ class WeatherOutput(BaseModel):
     wind_speed_ms: float | None = Field(default=None, description="Wind speed in metres per second")
     error: str | None = Field(default=None, description="Error message if the request failed, otherwise None")
 
+    @model_serializer
+    def serialize_model(self):
+        return {k: v for k, v in self.__dict__.items() if v is not None}
+
 
 class WebSearchOutput(BaseModel):
     """Output model for the web search tool."""
 
-    query: str | None = Field(default=None, description="The search query that was executed")
     summary: str | None = Field(default=None, description="AI-generated summary of the search results")
-    results: list[dict] | None = Field(default=None, description="List of search results with title, url, and content")
     error: str | None = Field(default=None, description="Error message if the request failed, otherwise None")
 
+    @model_serializer
+    def serialize_model(self):
+        return {k: v for k, v in self.__dict__.items() if v is not None}

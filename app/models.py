@@ -10,19 +10,18 @@ No business logic lives here - these are pure data shapes.
 """
 
 
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 
 class TraceStepType(str, Enum):
     """Valid types for a trace step in the agent's execution."""
 
-    LLM_REASONING = "llm_reasoning"
-    TOOL_CALL = "tool_call"
-    TOOL_RESULT = "tool_result"
-    FINAL_ANSWER = "final_answer"
+    LLM_REASONING = "llm reasoning"
+    TOOL_CALL = "tool call"
+    FINAL_ANSWER = "answer generation"
 
 
 class TaskStatus(str, Enum):
@@ -37,19 +36,22 @@ class TraceStep(BaseModel):
     """
     Represents one step in the agent's reasoning and execution trace.
 
-    Each step captures either LLM reasoning, a tool invocation, a tool result,
+    Each step captures either LLM reasoning, a tool invocation (with its result),
     or the final answer. Steps are ordered by step_index.
     """
 
     step_index: int
     type: TraceStepType
-    content: str | None = None
+    description: str | None = None
     tool_name: str | None = None
     tool_input: dict | None = None
     tool_output: dict | None = None
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     model_config = ConfigDict(use_enum_values=True)
+
+    @model_serializer
+    def serialize_model(self):
+        return {k: v for k, v in self.__dict__.items() if v is not None}
 
 
 class TaskRequest(BaseModel):
@@ -70,14 +72,12 @@ class TaskResponse(BaseModel):
     """
     Response returned immediately after POST /task completes.
 
-    Contains the agent's final answer, execution trace, and performance metrics.
+    Contains the agent's final answer and execution trace.
     """
 
     task_id: str
     final_answer: str
     trace: list[TraceStep]
-    token_usage: int
-    latency_ms: int
 
     model_config = ConfigDict(use_enum_values=True)
 

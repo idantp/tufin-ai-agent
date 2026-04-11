@@ -59,12 +59,17 @@ class TaskRequest(BaseModel):
     Request body for POST /task endpoint.
 
     Contains the natural language task the user wants the agent to solve.
+    Optionally includes a conversation_id to continue a multi-turn conversation.
     """
 
     input: str = Field(
         min_length=1,
         max_length=2000,
         description="The natural language task for the agent to solve",
+    )
+    conversation_id: str | None = Field(
+        default=None,
+        description="Existing conversation ID to continue. Omit to start a new conversation.",
     )
 
 
@@ -76,6 +81,7 @@ class TaskResponse(BaseModel):
     """
 
     task_id: str
+    conversation_id: str
     final_answer: str
     trace: list[TraceStep]
 
@@ -91,6 +97,7 @@ class TaskRecord(BaseModel):
     """
 
     task_id: str
+    conversation_id: str
     input: str
     final_answer: str | None = None
     status: TaskStatus

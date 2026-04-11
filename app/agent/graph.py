@@ -1,4 +1,5 @@
 """Graph for the agent."""
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import StateGraph, START, END
 from app.agent.state import AgentState
 from langchain_core.messages import BaseMessage, AIMessage
@@ -6,6 +7,9 @@ from app.config import get_settings
 from app.agent.reasoning_node import reasoning_node
 from app.agent.tools_executer_node import tools_executer_node
 from app.agent.max_iterations_answer_node import max_iterations_answer_node
+
+
+_compiled_graph = None
 
 
 def should_call_tools_router(state: AgentState) -> str:
@@ -24,8 +28,8 @@ def max_iterations_router(state: AgentState) -> str:
     return "reasoning"
 
 
-def build_agent_graph() -> StateGraph:
-    """Build the agent graph."""
+def build_agent_graph(checkpointer: BaseCheckpointSaver | None = None) -> StateGraph:
+    """Build and compile the agent graph with an optional checkpointer."""
     graph = StateGraph(AgentState)
     graph.add_node("reasoning", reasoning_node)
     graph.add_node("tools_execution", tools_executer_node)
@@ -49,6 +53,17 @@ def build_agent_graph() -> StateGraph:
         },
     )
     graph.add_edge("max_iterations_answer", END)
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)
 
-multi_step_agent = build_agent_graph()
+
+def init_agent_graph(checkpointer: BaseCheckpointSaver) -> None:
+    """Compile the graph with the given checkpointer and store it as a singleton."""
+    global _compiled_graph
+    _compiled_graph = build_agent_graph(checkpointer)
+
+
+def get_agent_graph():
+    """Return the compiled agent graph singleton."""
+    if _compiled_graph is None:
+        raise RuntimeError("Agent graph not initialized — call init_agent_graph() first")
+    return _compiled_graph

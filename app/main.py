@@ -13,6 +13,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
@@ -43,6 +44,19 @@ logger = logging.getLogger(__name__)
 
 VERSION = "0.1.0"
 
+
+async def preload_ollama_model(ollama_base_url: str, ollama_model: str):
+    """Pre-load an Ollama model into memory."""
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            await client.post(
+                f"{ollama_base_url}/api/generate",
+                json={"model": ollama_model},
+            )
+        logger.info("Ollama model '%s' pre-loaded into memory", ollama_model)
+    except Exception as e:
+        logger.warning("Failed to pre-load Ollama model: %s", e)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -64,6 +78,8 @@ async def lifespan(app: FastAPI):
     async with AsyncSqliteSaver.from_conn_string(settings.checkpoint_db_url) as checkpointer:
         init_agent_graph(checkpointer)
         logger.info("Agent graph compiled with checkpointer")
+        logger.info("Pre-loading Ollama model into memory")
+        await preload_ollama_model(settings.ollama_base_url, settings.ollama_model)
 
         yield
 

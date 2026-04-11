@@ -14,14 +14,18 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Request
+from langchain_core.messages import HumanMessage
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
+from app.agent.graph import get_agent_graph, init_agent_graph
 from app.config import get_settings
 from app.database import (
+    create_conversation,
     create_task,
+    get_conversation,
     get_task,
     get_trace_steps,
     init_db,
-    insert_trace_step,
     update_task,
 )
 from app.models import (
@@ -33,9 +37,6 @@ from app.models import (
     TraceStep,
     TraceStepType,
 )
-from app.agent.graph import multi_step_agent
-from app.agent.state import AgentState
-from langchain_core.messages import HumanMessage
 
 
 logger = logging.getLogger(__name__)
@@ -60,9 +61,13 @@ async def lifespan(app: FastAPI):
     await init_db(settings.database_url)
     logger.info("Database initialized")
 
-    yield
+    async with AsyncSqliteSaver.from_conn_string(settings.database_url) as checkpointer:
+        init_agent_graph(checkpointer)
+        logger.info("Agent graph compiled with checkpointer")
 
-    logger.info("Shutting down")
+        yield
+
+        logger.info("Shutting down")
 
 
 app = FastAPI(
@@ -97,14 +102,15 @@ async def create_task_endpoint(task_request: TaskRequest) -> TaskResponse:
     """
     Submit a new task to the agent.
 
-    Persists the task, runs the agent loop, records the full trace and final
-    answer to the DB, then returns the complete response.
+    If ``conversation_id`` is provided the agent resumes the existing
+    conversation (LangGraph reloads prior messages via the checkpointer).
+    Otherwise a brand-new conversation is started.
 
     Args:
-        task_request: Task request containing the input text.
+        task_request: Task request containing the input text and optional conversation_id.
 
     Returns:
-        TaskResponse: Task ID, final answer, and execution trace.
+        TaskResponse: Task ID, conversation ID, final answer, and execution trace.
 
     Raises:
         HTTPException: 500 if agent execution or persistence fails.
@@ -113,22 +119,38 @@ async def create_task_endpoint(task_request: TaskRequest) -> TaskResponse:
     task_id = str(uuid.uuid4())
     start_time = time.perf_counter()
 
-    logger.info("Task received: %s | input: %s", task_id, task_request.input[:50])
+    # Resolve or create conversation
+    conversation_id = task_request.conversation_id
+    if conversation_id is not None:
+        existing = await get_conversation(settings.database_url, conversation_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+    else:
+        conversation_id = str(uuid.uuid4())
+        await create_conversation(settings.database_url, conversation_id)
 
-    # Persist task before running so it exists even if the agent fails mid-run
-    await create_task(settings.database_url, task_id, task_request.input)
-
-    state = AgentState(
-        messages=[HumanMessage(content=task_request.input)],
-        agent_iteration=0,
-        trace_step_index=0,
-        task_id=task_id,
-        tokens_usage=0,
-        final_answer="",
+    logger.info(
+        "Task received: %s | conversation: %s | input: %s",
+        task_id, conversation_id, task_request.input[:50],
     )
 
+    await create_task(settings.database_url, task_id, conversation_id, task_request.input)
+
+    agent = get_agent_graph()
+    config = {"configurable": {"thread_id": conversation_id}}
+
     try:
-        result = await multi_step_agent.ainvoke(state)
+        result = await agent.ainvoke(
+            {
+                "messages": [HumanMessage(content=task_request.input)],
+                "task_id": task_id,
+                "agent_iteration": 0,
+                "trace_step_index": 0,
+                "tokens_usage": 0,
+                "final_answer": "",
+            },
+            config=config,
+        )
 
         final_answer: str = result.get("final_answer") or ""
         tokens_usage: int = result.get("tokens_usage", 0)
@@ -160,6 +182,7 @@ async def create_task_endpoint(task_request: TaskRequest) -> TaskResponse:
 
         return TaskResponse(
             task_id=task_id,
+            conversation_id=conversation_id,
             final_answer=final_answer,
             trace=trace_steps,
         )
@@ -231,6 +254,7 @@ async def get_task_endpoint(task_id: str) -> TaskRecord:
 
     return TaskRecord(
         task_id=task_dict["task_id"],
+        conversation_id=task_dict["conversation_id"],
         input=task_dict["input"],
         final_answer=task_dict.get("final_answer"),
         status=TaskStatus(task_dict["status"]),

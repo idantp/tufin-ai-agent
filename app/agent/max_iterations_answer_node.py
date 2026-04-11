@@ -5,7 +5,7 @@ import logging
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 
 from app.agent.llm import LLM
-from app.agent.prompts import MAX_ITERATIONS_WARNING, SYSTEM_PROMPT
+from app.agent.prompts import MAX_ITERATIONS_SYSTEM_PROMPT, MAX_ITERATIONS_WARNING
 from app.agent.state import AgentState
 from app.config import get_settings
 from app.database import insert_trace_step
@@ -18,7 +18,7 @@ def _prepare_messages(messages: list[BaseMessage]) -> list[BaseMessage]:
     """Return conversation with system prompt and iteration-limit warning injected."""
     prepared = list(messages)
     if not prepared or not isinstance(prepared[0], SystemMessage):
-        prepared.insert(0, SystemMessage(content=SYSTEM_PROMPT))
+        prepared.insert(0, SystemMessage(content=MAX_ITERATIONS_SYSTEM_PROMPT))
     prepared.append(SystemMessage(content=MAX_ITERATIONS_WARNING))
     return prepared
 

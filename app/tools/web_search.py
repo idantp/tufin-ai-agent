@@ -23,6 +23,8 @@ _REQUEST_TIMEOUT = 10.0
 async def search_web(query: str, max_results: int = 3) -> str:
     """
     Search the web using Tavily and return summarized results.
+    Use this tool to look up any factual information.
+    ALWAYS use this tool to verify facts before calling other tools.
 
     Args:
         query: Search query to find information on the web (e.g. "latest AI developments").

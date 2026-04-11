@@ -19,5 +19,6 @@ def get_llm_with_tools() -> BaseChatModel:
     """
     return _build_llm().bind_tools(ALL_TOOLS)
 
+LLM = _build_llm()
 LLM_WITH_TOOLS = get_llm_with_tools()
 TOOLS_MAP = {tool.name: tool for tool in ALL_TOOLS}

@@ -5,35 +5,50 @@ from langchain_core.messages import BaseMessage, AIMessage
 from app.config import get_settings
 from app.agent.reasoning_node import reasoning_node
 from app.agent.tools_executer_node import tools_executer_node
+from app.agent.max_iterations_answer_node import max_iterations_answer_node
 
 
-def should_call_tool(state: AgentState) -> bool:
-    """Check if the agent should call a tool."""
-    settings = get_settings()
-    if state.get("agent_iteration", 0) >= settings.agent_max_iterations:
-        return False
+def should_call_tools_router(state: AgentState) -> str:
+    """Binary router: does the LLM want to call tools or is this a final answer?"""
     last_message: BaseMessage = state["messages"][-1]
     if isinstance(last_message, AIMessage) and last_message.tool_calls:
-        return True
-    return False
+        return "tools_execution"
+    return "end"
+
+
+def max_iterations_router(state: AgentState) -> str:
+    """Binary router: has the agent exhausted its iteration budget?"""
+    settings = get_settings()
+    if state.get("agent_iteration", 0) >= settings.agent_max_iterations:
+        return "max_iterations_answer"
+    return "reasoning"
+
 
 def build_agent_graph() -> StateGraph:
     """Build the agent graph."""
     graph = StateGraph(AgentState)
     graph.add_node("reasoning", reasoning_node)
     graph.add_node("tools_execution", tools_executer_node)
+    graph.add_node("max_iterations_answer", max_iterations_answer_node)
 
     graph.add_edge(START, "reasoning")
     graph.add_conditional_edges(
         "reasoning",
-        should_call_tool,
+        should_call_tools_router,
         {
-            True: "tools_execution",
-            False: "reasoning",
+            "tools_execution": "tools_execution",
+            "end": END,
         },
     )
-
-    graph.add_edge("tools_execution", "reasoning")
+    graph.add_conditional_edges(
+        "tools_execution",
+        max_iterations_router,
+        {
+            "reasoning": "reasoning",
+            "max_iterations_answer": "max_iterations_answer",
+        },
+    )
+    graph.add_edge("max_iterations_answer", END)
     return graph.compile()
 
 multi_step_agent = build_agent_graph()

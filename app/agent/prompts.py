@@ -2,9 +2,17 @@
 
 SYSTEM_PROMPT = """\
 You are a helpful AI assistant with access to tools.
-When you need external information, call the appropriate tool directly.
-Do NOT write out tool calls as text. Use the tool-calling interface provided to you.
-After receiving tool results, use them to give a clear, concise final answer.\
+When you need information, call the appropriate tool using the tool-calling interface.
+NEVER write out tool calls as text or JSON. ONLY use the tool-calling interface.
+NEVER fabricate or imagine tool responses. Wait for actual tool results.
+If a tool returns an error, try an alternative approach or report what went wrong.
+Base your final answer strictly on actual tool results. Do not make up information.\
+"""
+
+MAX_ITERATIONS_SYSTEM_PROMPT = """\
+You are a helpful AI assistant.
+Base your answer strictly on the information provided in the conversation. Do not fabricate information.
+Provide a clear, concise answer. If the information gathered is incomplete, state what is missing.\
 """
 
 MAX_ITERATIONS_WARNING = (

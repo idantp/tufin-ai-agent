@@ -30,52 +30,53 @@ async def tools_executer_node(state: AgentState) -> AgentState:
         tool_func = TOOLS_MAP.get(tool_name)
 
         if tool_func is None:
-            result = json.dumps({"error": f"Tool {tool_name} not found"})
             description = f"Tool not found: {tool_name}"
+            result = json.dumps({"error": {description}})
+            
             logger.warning("Tool not found: %s (task %s)", tool_name, task_id)
-            await insert_trace_step(
-                settings.database_url,
-                task_id,
-                step_index=trace_step_index,
-                type=TraceStepType.TOOL_CALL.value,
-                tool_name=tool_name,
-                tool_input=json.dumps(tool_args),
-                tool_output=result,
-                description=description,
-            )
+            # await insert_trace_step(
+            #     settings.database_url,
+            #     task_id,
+            #     step_index=trace_step_index,
+            #     type=TraceStepType.TOOL_CALL.value,
+            #     tool_name=tool_name,
+            #     tool_input=json.dumps(tool_args),
+            #     tool_output=result,
+            #     description=description,
+            # )
         else:
             logger.info("Calling tool %s (task %s)", tool_name, task_id)
             try:
                 result = await tool_func.ainvoke(tool_args)
-                description = f"Executed {tool_name}"
+                description = f"Executed {tool_name}. See trace for details."
                 logger.info(
                     "Tool %s succeeded (task %s): %.120s",
                     tool_name, task_id, str(result),
                 )
             except Exception as e:
-                result = json.dumps({"error": str(e)})
-                description = f"Error executing {tool_name}: {e}"
+                description = f"Error executing {tool_name}. See trace for details."
+                result = json.dumps({"error": {description}})
+                
                 logger.error(
                     "Tool %s raised an exception (task %s): %s",
                     tool_name, task_id, e,
                 )
 
-            await insert_trace_step(
-                settings.database_url,
-                task_id,
-                step_index=trace_step_index,
-                type=TraceStepType.TOOL_CALL.value,
-                tool_name=tool_name,
-                tool_input=json.dumps(tool_args),
-                tool_output=result,
-                description=description,
-            )
+        await insert_trace_step(
+            settings.database_url,
+            task_id,
+            step_index=trace_step_index,
+            type=TraceStepType.TOOL_CALL.value,
+            tool_name=tool_name,
+            tool_input=json.dumps(tool_args),
+            tool_output=result,
+            description=description,
+        )
             
-        trace_step_index += 1
         tools_results.append(ToolMessage(content=result, tool_call_id=tool_call_id))
 
     return {
         "messages": tools_results,
-        "trace_step_index": trace_step_index,
+        "trace_step_index": trace_step_index + 1,
         "agent_iteration": agent_iteration + 1,
     }

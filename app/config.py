@@ -13,13 +13,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    anthropic_api_key: str = ""
     openweather_api_key: str = ""
     tavily_api_key: str = ""
     database_url: str = "./data/agent.db"
     ollama_model: str = "qwen2.5:14b"
     ollama_base_url: str = "http://localhost:11434"
-    agent_max_iterations: int = 1
+    agent_max_iterations: int = 10
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(env_file=".env")

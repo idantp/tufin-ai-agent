@@ -29,6 +29,7 @@ services:
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
       DATABASE_URL: /data/agent.db
+      CHECKPOINT_DB_URL: /data/checkpoints.db
     volumes:
       - agent_data:/data
     depends_on:

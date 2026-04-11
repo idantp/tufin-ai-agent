@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
     await init_db(settings.database_url)
     logger.info("Database initialized")
 
-    async with AsyncSqliteSaver.from_conn_string(settings.database_url) as checkpointer:
+    async with AsyncSqliteSaver.from_conn_string(settings.checkpoint_db_url) as checkpointer:
         init_agent_graph(checkpointer)
         logger.info("Agent graph compiled with checkpointer")
 

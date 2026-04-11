@@ -26,9 +26,6 @@ _REQUEST_TIMEOUT = 10.0
 async def get_weather(city: str) -> str:
     """
     Fetch current weather conditions for a specific city from OpenWeatherMap.
-    Use this tool once you have a concrete city name. If the question refers to a city
-    indirectly (e.g. "the capital of France", "the most populated city in Guatemala"),
-    first resolve the city name with search_web, then call this tool with that city name.
 
     Args:
         city: Exact name of the city to fetch weather for (e.g. "New York", "Paris", "Tokyo").

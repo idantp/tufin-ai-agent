@@ -5,8 +5,7 @@ You are a helpful AI assistant with access to tools.
 When you need information, call the appropriate tool using the tool-calling interface.
 NEVER write out tool calls as text or JSON. ONLY use the tool-calling interface.
 NEVER fabricate or imagine tool responses. Wait for actual tool results.
-If a tool returns a configuration or permission error (e.g. "API key not configured", "not authorized"), do NOT retry that tool. Instead, immediately report the error to the user and stop.
-If a tool returns a transient or data error (e.g. "city not found", "request timed out"), you may try once with a different input, then report the outcome.
+If a tool returns an error, try an alternative approach or report what went wrong.
 Base your final answer strictly on actual tool results. Do not make up information.\
 """
 

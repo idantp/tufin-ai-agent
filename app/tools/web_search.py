@@ -5,6 +5,7 @@ Uses the Tavily API with the key configured via TAVILY_API_KEY in the
 application settings.
 """
 
+import asyncio
 import logging
 
 from tavily import TavilyClient
@@ -22,19 +23,11 @@ _REQUEST_TIMEOUT = 10.0
 @tool
 async def search_web(query: str, max_results: int = 3) -> str:
     """
-    Search the web using Tavily and return summarized results.
-    Use this tool to look up any factual information.
-    ALWAYS use this tool to verify facts before calling other tools.
+    Search the web and return a summarized answer. Use this to look up any factual information.
 
     Args:
-        query: Search query to find information on the web (e.g. "latest AI developments").
-        max_results: Maximum number of search results to return (1-10). Defaults to 5.
-
-    Returns JSON string with:
-        - "query": the search query
-        - "summary": the summary of the search results
-        - "results": the list of search results with title, url, and content
-        - "error": the error message if the request failed, otherwise None
+        query: Search query (e.g. "latest AI developments").
+        max_results: Maximum number of results to return (1-10). Defaults to 3.
     """
     settings = get_settings()
 
@@ -46,8 +39,9 @@ async def search_web(query: str, max_results: int = 3) -> str:
 
     try:
         client = TavilyClient(api_key=settings.tavily_api_key)
-        
-        response = client.search(
+
+        response = await asyncio.to_thread(
+            client.search,
             query=query,
             max_results=max_results,
             include_answer=True,

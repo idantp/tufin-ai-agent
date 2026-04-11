@@ -1,0 +1,14 @@
+.venv/
+data/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.git/
+.gitignore
+.cursor/
+*.md
+scripts/
+.python-version

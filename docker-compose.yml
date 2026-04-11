@@ -1,0 +1,40 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    entrypoint: >
+      /bin/sh -c "
+        ollama serve &
+        echo 'Waiting for Ollama to start...';
+        until ollama list > /dev/null 2>&1; do sleep 1; done;
+        echo 'Pulling qwen2.5:14b...';
+        ollama pull qwen2.5:14b;
+        echo 'Model ready.';
+        wait
+      "
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      DATABASE_URL: /data/agent.db
+    volumes:
+      - agent_data:/data
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+volumes:
+  ollama_data:
+  agent_data:

@@ -25,20 +25,10 @@ _REQUEST_TIMEOUT = 10.0
 @tool
 async def get_weather(city: str) -> str:
     """
-    Fetch current weather conditions for a city from OpenWeatherMap.
+    Fetch current weather conditions for a specific city.
 
     Args:
-        city: Name of the city to fetch weather for (e.g. "New York", "Paris", "Tokyo").
-
-    Returns JSON string with:
-        - "city": the name of the city
-        - "country": the country code
-        - "temperature_celsius": the temperature in Celsius
-        - "feels_like_celsius": the feels-like temperature in Celsius
-        - "humidity_percent": the humidity in percent
-        - "description": the weather description
-        - "wind_speed_ms": the wind speed in meters per second
-        - "error": the error message if the request failed, otherwise None
+        city: City name (e.g. "New York", "Paris", "Tokyo").
     """
     settings = get_settings()
 

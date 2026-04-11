@@ -23,6 +23,7 @@ async def init_db(db_path: str) -> None:
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
     async with aiosqlite.connect(db_path) as db:
+        await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("PRAGMA foreign_keys = ON")
 
         await db.execute("""

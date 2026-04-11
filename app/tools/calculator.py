@@ -17,14 +17,10 @@ logger = logging.getLogger(__name__)
 @tool
 async def calculate(expression: str) -> str:
     """
-    Evaluate a mathematical expression.
+    Evaluate a mathematical expression safely.
 
     Args:
-        expression: A mathematical expression to evaluate (e.g. "1 + 1", "2 * 3", "sqrt(4)").
-
-    Returns JSON string with:
-        - "result": the numeric result of the expression
-        - "error": the error message if the evaluation failed
+        expression: A mathematical expression (e.g. "1 + 1", "2 * 3", "sqrt(4)").
     """
     logger.debug("Evaluating expression: %s", expression)
 

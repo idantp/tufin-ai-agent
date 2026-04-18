@@ -10,7 +10,7 @@ Multi-tool agent with async SQLite persistence.
 flowchart LR
     Client -->|"POST /task\nGET /tasks/{id}\nGET /health"| FastAPI
     FastAPI --> LangGraphAgent
-    LangGraphAgent --> Ollama["Ollama (qwen2.5:14b)"]
+    LangGraphAgent --> Ollama["Ollama (qwen2.5:7b-instruct-q4_K_M)"]
     LangGraphAgent --> Tools
     Tools --> OpenWeatherMap
     Tools --> Tavily
@@ -63,10 +63,10 @@ cp .env.example .env
 
 ### Docker Desktop memory requirement
 
-`qwen2.5:14b` requires ~8.7 GB of RAM. Before starting, ensure Docker Desktop is allocated enough memory:
+`qwen2.5:7b-instruct-q4_K_M` requires ~8 GB of RAM. Before starting, ensure Docker Desktop is allocated enough memory:
 
 1. Open **Docker Desktop** → **Settings** (gear icon) → **Resources** → **Advanced**
-2. Set **Memory** to at least **12 GB** (GPU is recommended)
+2. Set **Memory** to at least **16 GB** (GPU is recommended)
 3. Click **Apply & Restart**
 
 ### Running with Docker Compose, from project directory:
@@ -77,7 +77,7 @@ docker compose up --build
 
 This starts two services:
 
-- **`ollama`** — serves the `qwen2.5:14b` model (downloaded automatically on first run, ~9 GB)
+- **`ollama`** — serves the `qwen2.5:7b-instruct-q4_K_M` model (downloaded automatically on first run, ~9 GB)
 - **`app`** — FastAPI server available at [http://localhost:8000](http://localhost:8000)
 
 The `app` service waits for Ollama to finish pulling the model before starting. First boot may take several minutes.
@@ -170,7 +170,7 @@ Pass the `conversation_id` from a previous response to continue the same thread.
 curl -X POST http://localhost:8000/task \
   -H "Content-Type: application/json" \
   -d '{
-    "input": "And what about tomorrow?",
+    "input": "how far is this city from Jerusalem?",
     "conversation_id": "a1b2c3d4-..."
   }'
 ```
@@ -205,10 +205,10 @@ Possible `status` values: `pending`, `completed`, `failed`.
 
 ### Running locally (without Docker)
 
-Requires Python 3.12+ and [`uv`](https://github.com/astral-sh/uv), and a locally running [Ollama](https://ollama.com/) instance with `qwen2.5:14b` pulled:
+Requires Python 3.12+ and [`uv`](https://github.com/astral-sh/uv), and a locally running [Ollama](https://ollama.com/) instance with `qwen2.5:7b-instruct-q4_K_M` pulled:
 
 ```bash
-ollama pull qwen2.5:14b
+ollama pull qwen2.5:7b-instruct-q4_K_M
 ```
 
 Install dependencies and start the server:

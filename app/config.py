@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     database_url: str = "./data/agent.db"
     checkpoint_db_url: str = "./data/checkpoints.db"
-    ollama_model: str = "qwen2.5:14b"
+    ollama_model: str = "qwen2.5:7b-instruct-q4_K_M"
     ollama_base_url: str = "http://localhost:11434"
     agent_max_iterations: int = 10
     log_level: str = "INFO"

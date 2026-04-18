@@ -5,7 +5,7 @@ import logging
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 
 from app.agent.llm import LLM_WITH_TOOLS
-from app.agent.prompts import SYSTEM_PROMPT
+from app.agent.prompts import SYSTEM_PROMPT_1
 from app.agent.state import AgentState
 from app.config import get_settings
 from app.database import insert_trace_step
@@ -19,7 +19,7 @@ def _prepare_messages(messages: list[BaseMessage]) -> list[BaseMessage]:
     """Return a copy of the conversation with system prompt injected."""
     prepared = list(messages)
     if not prepared or not isinstance(prepared[0], SystemMessage):
-        prepared.insert(0, SystemMessage(content=SYSTEM_PROMPT))
+        prepared.insert(0, SystemMessage(content=SYSTEM_PROMPT_1))
     return prepared
 
 

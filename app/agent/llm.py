@@ -26,7 +26,7 @@ def _get_available_tools() -> list:
 
 def _build_llm() -> ChatOllama:
     settings = get_settings()
-    return ChatOllama(model=settings.ollama_model, base_url=settings.ollama_base_url, temperature=0.0)
+    return ChatOllama(model=settings.ollama_model, base_url=settings.ollama_base_url, temperature=0.0, keep_alive=-1)
 
 
 def get_llm_with_tools() -> BaseChatModel:

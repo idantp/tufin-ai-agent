@@ -48,12 +48,17 @@ VERSION = "0.1.0"
 async def preload_ollama_model(ollama_base_url: str, ollama_model: str):
     """Pre-load an Ollama model into memory."""
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            await client.post(
-                f"{ollama_base_url}/api/generate",
-                json={"model": ollama_model},
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            response = await client.post(
+                f"{ollama_base_url}/api/chat",
+                json={
+                    "model": ollama_model,
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "stream": False,
+                    "keep_alive": -1,
+                },
             )
-        logger.info("Ollama model '%s' pre-loaded into memory", ollama_model)
+        logger.info("Ollama model '%s' pre-loaded into memory. Response: %s", ollama_model, response.text)
     except Exception as e:
         logger.warning("Failed to pre-load Ollama model: %s", e)
 
